@@ -40,13 +40,12 @@ class CLIIntegrationTest(AsyncioTestCase):
         actual_output = actual_output.getvalue()
         self.assertIn("connection_status", actual_output)
 
-    def test_setup_logging(self):
+    def test_verbose_logging(self):
         def setup(argv):
             parser = cli.get_argument_parser()
             args, command_args = parser.parse_known_args(argv)
             loop = asyncio.get_event_loop()
-            conf = Config.create_from_arguments(args)
-            cli.setup_logging(args, conf, loop)
+            cli.setup_logging(loop, "/tmp/lbry-test-tmp-file", args.verbose, True, False)
 
         setup(["start"])
         self.assertTrue(logging.getLogger("lbry").isEnabledFor(logging.INFO))

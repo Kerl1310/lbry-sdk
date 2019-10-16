@@ -7,6 +7,7 @@ import asyncio
 import argparse
 import logging
 import logging.handlers
+import typing
 from docopt import docopt
 
 import aiohttp
@@ -143,7 +144,7 @@ class ArgumentParser(argparse.ArgumentParser):
 
     def error(self, message):
         self.print_help(argparse._sys.stderr)
-        self.exit(2, '\n'+message+'\n')
+        self.exit(2, f"\n{message}\n")
 
 
 class HelpFormatter(argparse.HelpFormatter):
@@ -221,35 +222,34 @@ def ensure_directory_exists(path: str):
         pathlib.Path(path).mkdir(parents=True, exist_ok=True)
 
 
-def setup_logging(args: argparse.Namespace, conf: Config, loop: asyncio.AbstractEventLoop):
+def setup_logging(loop: asyncio.AbstractEventLoop, log_file_path: str, verbose: typing.Optional[typing.List[str]],
+                  log_to_console: bool, log_to_loggly: bool):
     default_formatter = logging.Formatter("%(asctime)s %(levelname)-8s %(name)s:%(lineno)d: %(message)s")
-    file_handler = logging.handlers.RotatingFileHandler(
-        conf.log_file_path, maxBytes=2097152, backupCount=5
-    )
+
+    file_handler = logging.handlers.RotatingFileHandler(log_file_path, maxBytes=2097152, backupCount=5)
     file_handler.setFormatter(default_formatter)
     log.addHandler(file_handler)
     logging.getLogger('torba').addHandler(file_handler)
 
-    if not args.quiet:
-        handler = logging.StreamHandler()
-        handler.setFormatter(default_formatter)
-        log.addHandler(handler)
-        logging.getLogger('torba').addHandler(handler)
+    if log_to_console:
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(default_formatter)
+        log.addHandler(console_handler)
+        logging.getLogger('torba').addHandler(console_handler)
         logging.getLogger('torba').setLevel(logging.INFO)
 
     logging.getLogger('aioupnp').setLevel(logging.WARNING)
     logging.getLogger('aiohttp').setLevel(logging.CRITICAL)
 
     log.setLevel(logging.INFO)
-    if args.verbose is not None:
+    if verbose is not None:
         loop.set_debug(True)
-        if len(args.verbose) > 0:
-            for module in args.verbose:
-                logging.getLogger(module).setLevel(logging.DEBUG)
+        for module in verbose:
+            logging.getLogger(module).setLevel(logging.DEBUG)
         else:
             log.setLevel(logging.DEBUG)
 
-    if conf.share_usage_data:
+    if log_to_loggly:
         loggly_handler = get_loggly_handler()
         loggly_handler.setLevel(logging.ERROR)
         log.addHandler(loggly_handler)
@@ -257,7 +257,8 @@ def setup_logging(args: argparse.Namespace, conf: Config, loop: asyncio.Abstract
 
 def run_daemon(args: argparse.Namespace, conf: Config):
     loop = asyncio.get_event_loop()
-    setup_logging(args, conf, loop)
+    setup_logging(loop, log_file_path=conf.log_file_path, verbose=args.verbose, log_to_console=(not args.quiet),
+                  log_to_loggly=conf.share_usage_data)
     daemon = Daemon(conf)
 
     def __exit():
